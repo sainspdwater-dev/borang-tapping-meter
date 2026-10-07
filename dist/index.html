@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b5d3b" />
+    <meta name="description" content="Borang lapangan kutipan nombor meter dan koordinat." />
+    <title>Borang Tapping Meter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./config.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Borang Tapping Meter">
+        <span class="brand-mark">BT</span>
+        <span><strong>Borang Tapping</strong><small>Pasukan lapangan</small></span>
+      </a>
+      <div class="status-pill"><span></span><span id="connectionText">Sedia digunakan</span></div>
+    </header>
+
+    <main id="top" class="page-shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">KUTIPAN DATA METER</span>
+          <h1>Catat tepat.<br /><em>Siap lebih cepat.</em></h1>
+          <p>Ambil nombor meter, sahkan bacaan dan simpan koordinat lokasi dalam satu aliran ringkas.</p>
+        </div>
+        <aside class="overall-card">
+          <div class="overall-top"><span>Kemajuan keseluruhan</span><strong id="overallPercent">0%</strong></div>
+          <div class="overall-number"><strong id="overallDone">0</strong><span>/ <b id="overallTarget">468</b> premis</span></div>
+          <div class="progress-track"><div id="overallBar" class="progress-fill"></div></div>
+          <small id="overallRemaining">468 rekod lagi untuk disiapkan</small>
+        </aside>
+      </section>
+
+      <section class="workspace-grid">
+        <aside class="progress-panel">
+          <div class="panel-heading">
+            <div><span class="section-kicker">RINGKASAN</span><h2>Kemajuan kawasan</h2></div>
+            <button id="refreshStats" class="icon-button" type="button" title="Muat semula">↻</button>
+          </div>
+          <div id="areaCards" class="area-list" aria-live="polite"></div>
+          <p class="panel-footnote"><span class="pulse-dot"></span> Kiraan dikemas kini selepas setiap simpanan.</p>
+        </aside>
+
+        <section class="form-card">
+          <div class="form-heading">
+            <div><span class="section-kicker">REKOD BAHARU</span><h2>Butiran meter</h2></div>
+            <span class="required-note"><b>*</b> Wajib diisi</span>
+          </div>
+
+          <form id="tappingForm" novalidate>
+            <div class="field-group">
+              <label for="areaSelect">Nama kawasan <b>*</b></label>
+              <div class="select-wrap"><select id="areaSelect" name="area" required></select></div>
+              <small>Kawasan aktif akan kekal dipilih untuk rekod seterusnya.</small>
+            </div>
+
+            <div class="field-group">
+              <div class="label-row"><label>No. meter <b>*</b></label><span id="meterStatus" class="field-status">Belum disahkan</span></div>
+              <div class="mode-switch" role="tablist" aria-label="Kaedah nombor meter">
+                <button class="mode-button active" type="button" data-mode="camera" role="tab">⌾ Imbas kamera</button>
+                <button class="mode-button" type="button" data-mode="manual" role="tab">✎ Isi manual</button>
+              </div>
+
+              <div id="cameraMode" class="meter-mode active">
+                <input id="meterImage" type="file" accept="image/*" capture="environment" hidden />
+                <button id="openCamera" class="capture-box" type="button">
+                  <span class="capture-icon">⌾</span>
+                  <span><strong>Ambil gambar nombor meter</strong><small>Pastikan nombor jelas dan memenuhi bingkai</small></span>
+                  <span class="capture-action">Buka kamera</span>
+                </button>
+                <p class="privacy-note">◈ Gambar diproses pada peranti dan dipadam selepas nombor disahkan.</p>
+              </div>
+
+              <div id="manualMode" class="meter-mode">
+                <div class="input-with-icon"><span>#</span><input id="manualMeter" type="text" inputmode="numeric" autocomplete="off" placeholder="Contoh: 28193457" maxlength="30" /></div>
+                <button id="confirmManual" class="text-button" type="button">Sahkan nombor manual →</button>
+              </div>
+              <div id="confirmedMeter" class="confirmed-value" hidden>
+                <div><span>NO. METER DISAHKAN</span><strong id="confirmedMeterText"></strong></div>
+                <button id="editMeter" type="button">Ubah</button>
+              </div>
+              <input id="meterValue" name="meter" type="hidden" required />
+            </div>
+
+            <div class="field-group">
+              <label for="coordinates">Koordinat <b>*</b></label>
+              <div class="coordinate-row">
+                <div class="input-with-icon grow"><span>⌖</span><input id="coordinates" name="coordinates" type="text" placeholder="2.7259, 101.9378" required /></div>
+                <button id="getLocation" class="location-button" type="button"><span>◎</span><span>Lokasi semasa</span></button>
+              </div>
+              <small id="locationHint">Isi latitude, longitude atau gunakan lokasi semasa.</small>
+            </div>
+
+            <div id="turnstileWrap" class="turnstile-wrap">
+              <div id="turnstileWidget"></div>
+              <div id="turnstileDemo" class="turnstile-demo"><span>✓</span><div><strong>Perlindungan Turnstile</strong><small>Mod demo — masukkan site key untuk produksi</small></div><b>CF</b></div>
+            </div>
+
+            <button id="submitButton" class="primary-button" type="submit"><span>Simpan rekod</span><span>→</span></button>
+            <p class="deferred-note">No. akaun dan alamat pengguna boleh dilengkapkan kemudian di Google Sheet.</p>
+          </form>
+        </section>
+      </section>
+    </main>
+
+    <div id="ocrModal" class="modal" hidden>
+      <div class="modal-backdrop"></div>
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ocrTitle">
+        <button id="closeModal" class="modal-close" type="button" aria-label="Tutup">×</button>
+        <span class="section-kicker">SEMAKAN FOTO</span>
+        <h2 id="ocrTitle">Baca nombor meter</h2>
+        <div class="preview-frame"><img id="meterPreview" alt="Pratonton nombor meter" /><div class="scan-line"></div></div>
+        <p id="ocrMessage">Pastikan nombor dalam gambar kelihatan jelas sebelum bacaan dimulakan.</p>
+        <div id="ocrResultWrap" class="ocr-result" hidden>
+          <label for="ocrResult">Nombor yang dikesan</label>
+          <input id="ocrResult" type="text" inputmode="numeric" maxlength="30" />
+          <small>Semak dan betulkan jika bacaan tidak tepat.</small>
+        </div>
+        <div class="modal-actions">
+          <button id="retakePhoto" class="secondary-button" type="button">Ambil semula</button>
+          <button id="runOcr" class="primary-button compact" type="button">Baca nombor</button>
+          <button id="confirmOcr" class="primary-button compact" type="button" hidden>Betul, sahkan</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
