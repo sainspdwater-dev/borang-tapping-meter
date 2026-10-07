@@ -122,7 +122,11 @@ function base64Url(value) {
 
 function corsHeaders(request, env) {
   const origin = request.headers.get("Origin") || "";
-  const allowed = env.ALLOWED_ORIGIN === "*" || origin === env.ALLOWED_ORIGIN ? origin || "*" : env.ALLOWED_ORIGIN;
+  const configured = String(env.ALLOWED_ORIGINS || env.ALLOWED_ORIGIN || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const allowed = configured.includes("*") || configured.includes(origin) ? origin || "*" : configured[0] || "null";
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",

@@ -1,8 +1,6 @@
 window.APP_CONFIG = {
-  // Tukar kepada URL Cloudflare Worker anda selepas deploy.
-  apiBaseUrl: "",
-  // Masukkan Turnstile site key Cloudflare (public key, selamat di frontend).
-  turnstileSiteKey: "",
-  // Mod demo menyimpan rekod dalam pelayar sahaja untuk prototaip ini.
+  apiBaseUrl: "https://borang-tapping-api.apiz1335.workers.dev",
+  turnstileSiteKey: "0x4AAAAAAFQGKfyZVR_Dyy8o",
+  // Kekal true sehingga kelayakan Google service account dipasang di Worker.
   demoMode: true
 };

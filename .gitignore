@@ -1,0 +1,5 @@
+cloudflare-worker/node_modules/
+cloudflare-worker/.wrangler/
+site-package.zip
+.DS_Store
+Thumbs.db
