@@ -86,8 +86,11 @@ async function loadStats() {
 }
 
 function setConfirmedMeter(value) {
-  const normalized = value.trim().toUpperCase().replace(/\s+/g, "");
+  const normalized = value.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
   if (!normalized) return showToast("Masukkan nombor meter dahulu.", "error");
+  if (!/^(?:SAINS|JBANS)[A-Z0-9-]{4,25}$/.test(normalized)) {
+    return showToast("Nombor meter mesti bermula dengan SAINS atau JBANS dan mempunyai sekurang-kurangnya 4 aksara selepasnya.", "error");
+  }
   $("#meterValue").value = normalized;
   $("#confirmedMeterText").textContent = normalized;
   $("#confirmedMeter").hidden = false;
@@ -134,6 +137,105 @@ async function loadTesseract() {
   return window.Tesseract;
 }
 
+async function createOcrVariants(file) {
+  const bitmap = await createImageBitmap(file);
+  const longestSide = Math.max(bitmap.width, bitmap.height);
+  const scale = Math.min(2.2, Math.max(1, 1900 / longestSide));
+  const sourceWidth = Math.round(bitmap.width * scale);
+  const sourceHeight = Math.round(bitmap.height * scale);
+  const rotations = [90, 270, 0, 180];
+  const fullImages = rotations.map((degrees) => {
+    const sideways = degrees === 90 || degrees === 270;
+    const canvas = document.createElement("canvas");
+    canvas.width = sideways ? sourceHeight : sourceWidth;
+    canvas.height = sideways ? sourceWidth : sourceHeight;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.save();
+    context.translate(canvas.width / 2, canvas.height / 2);
+    context.rotate((degrees * Math.PI) / 180);
+    context.filter = "grayscale(1) contrast(1.8) brightness(1.08)";
+    context.drawImage(bitmap, -sourceWidth / 2, -sourceHeight / 2, sourceWidth, sourceHeight);
+    context.restore();
+    return { canvas, degrees, psm: "11", label: `${degrees}° penuh` };
+  });
+  bitmap.close();
+
+  const bands = fullImages
+    .filter(({ degrees }) => degrees === 90 || degrees === 270)
+    .flatMap(({ canvas, degrees }) => {
+      const cropY = Math.round(canvas.height * 0.18);
+      const cropHeight = Math.round(canvas.height * 0.64);
+      const band = document.createElement("canvas");
+      band.width = canvas.width;
+      band.height = cropHeight;
+      const bandContext = band.getContext("2d", { willReadFrequently: true });
+      bandContext.filter = "grayscale(1) contrast(2.5) brightness(1.08)";
+      bandContext.drawImage(canvas, 0, cropY, canvas.width, cropHeight, 0, 0, band.width, band.height);
+
+      const threshold = document.createElement("canvas");
+      threshold.width = band.width;
+      threshold.height = band.height;
+      const thresholdContext = threshold.getContext("2d", { willReadFrequently: true });
+      thresholdContext.drawImage(band, 0, 0);
+      const imageData = thresholdContext.getImageData(0, 0, threshold.width, threshold.height);
+      const pixels = imageData.data;
+      for (let index = 0; index < pixels.length; index += 4) {
+        const luminance = pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114;
+        const value = luminance > 168 ? 0 : 255;
+        pixels[index] = value;
+        pixels[index + 1] = value;
+        pixels[index + 2] = value;
+      }
+      thresholdContext.putImageData(imageData, 0, 0);
+      return [
+        { canvas: band, degrees, psm: "7", label: `${degrees}° jalur` },
+        { canvas: threshold, degrees, psm: "7", label: `${degrees}° jalur jelas` }
+      ];
+    });
+
+  return [...bands, ...fullImages];
+}
+
+function meterPrefixFromOcr(value) {
+  if (value.length < 5) return "";
+  const prefixes = [
+    { name: "SAINS", patterns: [/[S5]/, /[A4]/, /[I1L]/, /[NM]/, /[S5]/] },
+    { name: "JBANS", patterns: [/[J1I]/, /[B8]/, /[A4]/, /[NM]/, /[S5]/] }
+  ];
+  const exact = prefixes.find(({ name }) => value.startsWith(name));
+  if (exact) return exact.name;
+  return prefixes.find(({ patterns }) => patterns.every((pattern, index) => pattern.test(value[index])))?.name || "";
+}
+
+function extractMeterNumber(text) {
+  const lines = String(text || "")
+    .toUpperCase()
+    .split(/\r?\n/)
+    .map((line) => line.replace(/[^A-Z0-9]/g, ""))
+    .filter(Boolean);
+  const joined = lines.join("");
+  const sources = [...lines, joined];
+  const candidates = [];
+
+  for (const source of sources) {
+    for (let index = 0; index <= source.length - 5; index += 1) {
+      const rest = source.slice(index);
+      const prefix = meterPrefixFromOcr(rest);
+      if (!prefix) continue;
+      const exact = rest.startsWith(prefix);
+      const corrected = `${prefix}${rest.slice(5)}`;
+      const match = corrected.match(/^(?:SAINS|JBANS)[A-Z]{0,5}\d{4,12}/) || corrected.match(/^(?:SAINS|JBANS)[A-Z0-9]{4,20}/);
+      if (!match) continue;
+      const value = match[0].slice(0, 30);
+      const digitCount = (value.match(/\d/g) || []).length;
+      candidates.push({ value, score: (exact ? 100 : 70) + digitCount * 3 - Math.abs(value.length - 12) });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score || a.value.length - b.value.length);
+  return candidates[0]?.value || "";
+}
+
 async function runOcr() {
   if (!state.imageFile) return;
   const button = $("#runOcr");
@@ -143,21 +245,41 @@ async function runOcr() {
   $("#ocrMessage").textContent = "OCR sedang mencari corak nombor pada imej. Ini mungkin mengambil beberapa saat.";
   try {
     const Tesseract = await loadTesseract();
-    const result = await Tesseract.recognize(state.imageFile, "eng", {
+    const variants = await createOcrVariants(state.imageFile);
+    const worker = await Tesseract.createWorker("eng", 1, {
       logger: (progress) => {
         if (progress.status === "recognizing text") {
           button.textContent = `Membaca ${Math.round(progress.progress * 100)}%`;
         }
       }
     });
-    const candidates = (result.data.text.match(/[A-Z0-9-]{4,}/gi) || [])
-      .map((item) => item.replace(/[^A-Z0-9-]/gi, ""))
-      .sort((a, b) => b.length - a.length);
-    $("#ocrResult").value = candidates[0] || result.data.text.replace(/\s+/g, "").slice(0, 30);
+    await worker.setParameters({
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+      tessedit_pageseg_mode: "11",
+      preserve_interword_spaces: "1"
+    });
+
+    let meter = "";
+    try {
+      for (let index = 0; index < variants.length; index += 1) {
+        button.textContent = `Mencuba bacaan ${index + 1}/${variants.length}…`;
+        await worker.setParameters({ tessedit_pageseg_mode: variants[index].psm });
+        const result = await worker.recognize(variants[index].canvas);
+        meter = extractMeterNumber(result.data.text);
+        if (meter) break;
+      }
+    } finally {
+      await worker.terminate();
+      variants.forEach(({ canvas }) => { canvas.width = 1; canvas.height = 1; });
+    }
+
+    $("#ocrResult").value = meter;
     $("#ocrResultWrap").hidden = false;
     $("#confirmOcr").hidden = false;
     button.hidden = true;
-    $("#ocrMessage").textContent = "Adakah nombor ini sama seperti yang tertera pada meter?";
+    $("#ocrMessage").textContent = meter
+      ? "Adakah nombor ini sama seperti yang tertera pada meter?"
+      : "OCR belum dapat membaca nombor penuh. Taip nombor penuh bermula dengan SAINS atau JBANS berdasarkan meter.";
   } catch (error) {
     showToast(error.message, "error");
     $("#ocrMessage").textContent = "OCR gagal membaca imej. Ambil semula gambar atau gunakan isi manual.";

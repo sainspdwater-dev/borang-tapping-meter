@@ -80,7 +80,7 @@
               </div>
 
               <div id="manualMode" class="meter-mode">
-                <div class="input-with-icon"><span>#</span><input id="manualMeter" type="text" inputmode="numeric" autocomplete="off" placeholder="Contoh: 28193457" maxlength="30" /></div>
+                <div class="input-with-icon"><span>#</span><input id="manualMeter" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" placeholder="Contoh: SAINSJA2437 / JBANS..." maxlength="30" /></div>
                 <button id="confirmManual" class="text-button" type="button">Sahkan nombor manual →</button>
               </div>
               <div id="confirmedMeter" class="confirmed-value" hidden>
@@ -121,8 +121,8 @@
         <p id="ocrMessage">Pastikan nombor dalam gambar kelihatan jelas sebelum bacaan dimulakan.</p>
         <div id="ocrResultWrap" class="ocr-result" hidden>
           <label for="ocrResult">Nombor yang dikesan</label>
-          <input id="ocrResult" type="text" inputmode="numeric" maxlength="30" />
-          <small>Semak dan betulkan jika bacaan tidak tepat.</small>
+          <input id="ocrResult" type="text" inputmode="text" autocapitalize="characters" maxlength="30" />
+          <small>Nombor meter mesti bermula dengan SAINS atau JBANS. Semak dan betulkan jika perlu.</small>
         </div>
         <div class="modal-actions">
           <button id="retakePhoto" class="secondary-button" type="button">Ambil semula</button>

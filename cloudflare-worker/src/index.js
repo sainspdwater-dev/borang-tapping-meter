@@ -48,7 +48,7 @@ export default {
 
 function validateSubmission(body) {
   if (!body || !AREA_TARGETS[body.area]) return "Nama kawasan tidak sah.";
-  if (!/^[A-Z0-9-]{3,30}$/i.test(String(body.meter || ""))) return "Nombor meter tidak sah.";
+  if (!/^(?:SAINS|JBANS)[A-Z0-9-]{4,25}$/i.test(String(body.meter || ""))) return "Nombor meter mesti bermula dengan SAINS atau JBANS.";
   const coordinatePattern = /^-?\d{1,2}(?:\.\d+)?,\s*-?\d{1,3}(?:\.\d+)?$/;
   if (!coordinatePattern.test(String(body.coordinates || ""))) return "Format koordinat tidak sah.";
   if (!body.turnstileToken) return "Token Turnstile diperlukan.";
