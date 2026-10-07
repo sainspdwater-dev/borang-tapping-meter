@@ -67,7 +67,7 @@ async function verifyTurnstile(token, request, env) {
 
 async function readSheet(env) {
   const token = await googleAccessToken(env);
-  const range = encodeURIComponent(`${env.GOOGLE_SHEET_NAME}!A:E`);
+  const range = encodeURIComponent(`${env.GOOGLE_SHEET_NAME}!${env.GOOGLE_DATA_RANGE || "A8:E"}`);
   const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${range}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -78,7 +78,7 @@ async function readSheet(env) {
 
 async function appendSheet(values, env) {
   const token = await googleAccessToken(env);
-  const range = encodeURIComponent(`${env.GOOGLE_SHEET_NAME}!A:E`);
+  const range = encodeURIComponent(`${env.GOOGLE_SHEET_NAME}!${env.GOOGLE_DATA_RANGE || "A8:E"}`);
   const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

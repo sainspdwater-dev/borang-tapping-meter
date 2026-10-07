@@ -32,7 +32,7 @@ Buka `http://localhost:4173`.
 
    `NAMA KAWASAN | NO METER | NO AKAUN | KORDINAT | ALAMAT PENGGUNA`
 
-   Data rujukan sasaran kawasan di bahagian atas helaian tidak mengganggu API selagi `GOOGLE_SHEET_NAME` menunjuk kepada tab data yang betul dan baris pertama tab itu ialah header di atas.
+   Konfigurasi semasa membaca jadual data dari `A8:E`, selaras dengan helaian contoh. Jika header dipindahkan, ubah `GOOGLE_DATA_RANGE` dalam `cloudflare-worker/wrangler.toml`.
 
 ## Deploy Cloudflare Worker
 
