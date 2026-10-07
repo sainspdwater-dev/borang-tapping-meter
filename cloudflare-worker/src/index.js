@@ -23,6 +23,35 @@ export default {
         for (const row of rows.slice(1)) if (row[0] in counts) counts[row[0]] += 1;
         return json({ counts, targets: AREA_TARGETS }, 200, cors);
       }
+      if (request.method === "POST" && url.pathname === "/api/ocr") {
+        const contentLength = Number(request.headers.get("Content-Length") || 0);
+        if (contentLength > 5_000_000) return json({ error: "Saiz gambar terlalu besar." }, 413, cors);
+        const body = await request.json();
+        if (!/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(String(body?.image || ""))) {
+          return json({ error: "Format gambar tidak sah." }, 400, cors);
+        }
+
+        const imageFile = dataUrlToBlob(body.image);
+        const result = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
+          messages: [{
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Read the water meter serial embossed or printed on the meter body. It starts with SAINS or JBANS. Ignore m3 and the rolling consumption counter. Reply only with the complete serial in uppercase without spaces."
+              },
+              { type: "image_url", image_url: { url: body.image } }
+            ]
+          }],
+          temperature: 0,
+          max_completion_tokens: 40,
+          chat_template_kwargs: { enable_thinking: false }
+        });
+        const raw = aiText(result);
+        const meter = extractMeterSerial(raw);
+        if (!meter) return json({ meter: "", error: "Nombor penuh tidak dapat dibaca dengan yakin." }, 422, cors);
+        return json({ meter }, 200, cors);
+      }
       if (request.method === "POST" && url.pathname === "/api/submissions") {
         const body = await request.json();
         const validation = validateSubmission(body);
@@ -45,6 +74,28 @@ export default {
     }
   }
 };
+
+function aiText(result) {
+  return String(result?.response || result?.choices?.[0]?.message?.content || "");
+}
+
+function dataUrlToBlob(dataUrl) {
+  const match = String(dataUrl).match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
+  if (!match) throw new Error("Invalid image data URL");
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const extension = match[1] === "jpeg" ? "jpg" : match[1];
+  return { extension, blob: new Blob([bytes], { type: `image/${match[1]}` }) };
+}
+
+function extractMeterSerial(text) {
+  const original = String(text || "").toUpperCase();
+  const direct = original.match(/(?:SAINS|JBANS)[A-Z0-9-]{4,25}/);
+  if (direct) return direct[0];
+  const normalized = original.replace(/[^A-Z0-9-]/g, "");
+  return normalized.match(/(?:SAINS|JBANS)[A-Z0-9-]{4,15}/)?.[0] || "";
+}
 
 function validateSubmission(body) {
   if (!body || !AREA_TARGETS[body.area]) return "Nama kawasan tidak sah.";

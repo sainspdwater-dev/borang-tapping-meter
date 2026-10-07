@@ -3,6 +3,9 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
+[ai]
+binding = "AI"
+
 [vars]
 ALLOWED_ORIGINS = "https://borang-tapping-meter.decent-macaw-6685.chatgpt.site,https://sainspdwater-dev.github.io,https://interactiq-edu.github.io"
 GOOGLE_SHEET_ID = "1iacoQDHvR9Rr9_NrpYFAknvaP_kfXD9bcGXB_oFPHQ0"
