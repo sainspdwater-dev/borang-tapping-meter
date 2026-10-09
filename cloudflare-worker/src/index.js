@@ -53,6 +53,8 @@ export default {
         return json({ meter }, 200, cors);
       }
       if (request.method === "POST" && url.pathname === "/api/submissions") {
+        const contentLength = Number(request.headers.get("Content-Length") || 0);
+        if (contentLength > 1_600_000) return json({ error: "Saiz gambar melebihi had 1 MB." }, 413, cors);
         const body = await request.json();
         const validation = validateSubmission(body);
         if (validation) return json({ error: validation }, 400, cors);
@@ -64,7 +66,18 @@ export default {
         const duplicate = rows.slice(1).some((row) => String(row[1] || "").toUpperCase() === body.meter.toUpperCase());
         if (duplicate) return json({ error: "Nombor meter ini sudah wujud dalam rekod." }, 409, cors);
 
-        await appendSheet([body.area, body.meter, "", body.coordinates, ""], env);
+        let photoUrl = "";
+        if (body.image) {
+          try {
+            const upload = await uploadPhotoToDrive(body, env);
+            photoUrl = upload.fileUrl || "";
+          } catch (error) {
+            console.error(error);
+            return json({ error: "Gambar tidak dapat disimpan ke Google Drive. Sila cuba semula." }, 502, cors);
+          }
+        }
+        await ensureSheetHeaders(env);
+        await appendSheet([body.area, body.meter, "", body.coordinates, "", "", photoUrl], env);
         return json({ ok: true }, 201, cors);
       }
       return json({ error: "Laluan tidak ditemui." }, 404, cors);
@@ -103,7 +116,39 @@ function validateSubmission(body) {
   const coordinatePattern = /^-?\d{1,2}(?:\.\d+)?,\s*-?\d{1,3}(?:\.\d+)?$/;
   if (!coordinatePattern.test(String(body.coordinates || ""))) return "Format koordinat tidak sah.";
   if (!body.turnstileToken) return "Token Turnstile diperlukan.";
+  if (body.image) {
+    if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(String(body.image))) return "Format gambar tidak sah.";
+    if (dataUrlByteLength(body.image) > 1_000_000) return "Saiz gambar melebihi had 1 MB.";
+  }
   return null;
+}
+
+function dataUrlByteLength(dataUrl) {
+  const base64 = String(dataUrl).split(",")[1] || "";
+  const padding = (base64.match(/=+$/) || [""])[0].length;
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}
+
+async function uploadPhotoToDrive(body, env) {
+  if (!env.GOOGLE_DRIVE_UPLOAD_URL || !env.GOOGLE_DRIVE_UPLOAD_SECRET) {
+    throw new Error("Google Drive upload is not configured");
+  }
+  const response = await fetch(env.GOOGLE_DRIVE_UPLOAD_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      secret: env.GOOGLE_DRIVE_UPLOAD_SECRET,
+      area: body.area,
+      meter: body.meter,
+      image: body.image
+    }),
+    redirect: "follow"
+  });
+  const text = await response.text();
+  let result;
+  try { result = JSON.parse(text); } catch { throw new Error(`Google Drive upload failed: ${response.status}`); }
+  if (!response.ok || !result.ok) throw new Error(`Google Drive upload failed: ${result.error || response.status}`);
+  return result;
 }
 
 async function verifyTurnstile(token, request, env) {
@@ -136,6 +181,17 @@ async function appendSheet(values, env) {
     body: JSON.stringify({ values: [values] })
   });
   if (!response.ok) throw new Error(`Google Sheets append failed: ${response.status}`);
+}
+
+async function ensureSheetHeaders(env) {
+  const token = await googleAccessToken(env);
+  const range = encodeURIComponent(`${env.GOOGLE_SHEET_NAME}!G8`);
+  const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${range}?valueInputOption=RAW`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values: [["LINK GAMBAR"]] })
+  });
+  if (!response.ok) throw new Error(`Google Sheets header update failed: ${response.status}`);
 }
 
 async function googleAccessToken(env) {

@@ -6,7 +6,7 @@ compatibility_date = "2026-10-01"
 ALLOWED_ORIGINS = "https://USERNAME.github.io"
 GOOGLE_SHEET_ID = "YOUR_GOOGLE_SHEET_ID"
 GOOGLE_SHEET_NAME = "Sheet1"
-GOOGLE_DATA_RANGE = "A8:E"
+GOOGLE_DATA_RANGE = "A8:G"
 
 # Rahsia berikut mesti ditambah dengan `wrangler secret put`:
 # TURNSTILE_SECRET_KEY

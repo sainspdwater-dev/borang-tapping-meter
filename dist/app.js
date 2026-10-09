@@ -13,6 +13,8 @@ const state = {
   stats: Object.fromEntries(AREAS.map((area) => [area.name, 0])),
   imageFile: null,
   imageUrl: null,
+  preparedImage: null,
+  confirmedImage: null,
   turnstileToken: "",
   widgetId: null
 };
@@ -85,7 +87,7 @@ async function loadStats() {
   }
 }
 
-function setConfirmedMeter(value) {
+function setConfirmedMeter(value, { fromPhoto = false } = {}) {
   const normalized = value.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
   if (!normalized) return showToast("Masukkan nombor meter dahulu.", "error");
   if (!/^(?:SAINS|JBANS)[A-Z0-9-]{4,25}$/.test(normalized)) {
@@ -98,7 +100,10 @@ function setConfirmedMeter(value) {
   $("#manualMode").classList.remove("active");
   $("#meterStatus").textContent = "Sudah disahkan";
   $("#meterStatus").classList.add("ok");
-  clearImage();
+  state.confirmedImage = fromPhoto ? state.preparedImage : null;
+  if (!fromPhoto) state.preparedImage = null;
+  $("#photoSaveStatus").hidden = !state.confirmedImage;
+  clearSourceImage();
 }
 
 function clearConfirmedMeter() {
@@ -106,16 +111,24 @@ function clearConfirmedMeter() {
   $("#confirmedMeter").hidden = true;
   $("#meterStatus").textContent = "Belum disahkan";
   $("#meterStatus").classList.remove("ok");
+  state.confirmedImage = null;
+  state.preparedImage = null;
+  $("#photoSaveStatus").hidden = true;
   const activeMode = $(".mode-button.active").dataset.mode;
   $(`#${activeMode}Mode`).classList.add("active");
 }
 
-function clearImage() {
+function clearSourceImage() {
   if (state.imageUrl) URL.revokeObjectURL(state.imageUrl);
   state.imageUrl = null;
   state.imageFile = null;
   meterImage.value = "";
   $("#meterPreview").removeAttribute("src");
+}
+
+function clearImage() {
+  clearSourceImage();
+  state.preparedImage = null;
 }
 
 function closeModal(clear = true) {
@@ -125,19 +138,41 @@ function closeModal(clear = true) {
   if (clear) clearImage();
 }
 
+function dataUrlByteSize(dataUrl) {
+  const base64 = String(dataUrl).split(",")[1] || "";
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - ((base64.match(/=+$/) || [""])[0].length));
+}
+
 async function prepareOcrImage(file) {
   const bitmap = await createImageBitmap(file);
-  const maxSide = 1400;
+  const maxSide = 1600;
   const longestSide = Math.max(bitmap.width, bitmap.height);
   const targetSide = Math.min(maxSide, Math.max(1024, longestSide));
-  const scale = targetSide / longestSide;
+  let scale = targetSide / longestSide;
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
   const context = canvas.getContext("2d");
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.86);
+
+  let quality = 0.88;
+  let dataUrl = canvas.toDataURL("image/jpeg", quality);
+  while (dataUrlByteSize(dataUrl) > 1_000_000) {
+    if (quality > 0.58) {
+      quality -= 0.08;
+    } else {
+      const resized = document.createElement("canvas");
+      resized.width = Math.max(480, Math.round(canvas.width * 0.84));
+      resized.height = Math.max(480, Math.round(canvas.height * 0.84));
+      resized.getContext("2d").drawImage(canvas, 0, 0, resized.width, resized.height);
+      canvas.width = resized.width;
+      canvas.height = resized.height;
+      context.drawImage(resized, 0, 0);
+      quality = 0.72;
+    }
+    dataUrl = canvas.toDataURL("image/jpeg", quality);
+  }
   canvas.width = 1;
   canvas.height = 1;
   return dataUrl;
@@ -152,7 +187,8 @@ async function runOcr() {
   $("#ocrMessage").textContent = "Cloudflare AI sedang membaca nombor siri pada meter…";
   try {
     if (!config.apiBaseUrl || config.demoMode) throw new Error("Cloudflare AI belum tersedia.");
-    const image = await prepareOcrImage(state.imageFile);
+    const image = state.preparedImage || await prepareOcrImage(state.imageFile);
+    state.preparedImage = image;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     let response;
@@ -208,7 +244,8 @@ async function submitRecord(event) {
     area: areaSelect.value,
     meter: $("#meterValue").value,
     coordinates: $("#coordinates").value.trim(),
-    turnstileToken: state.turnstileToken
+    turnstileToken: state.turnstileToken,
+    image: state.confirmedImage || ""
   };
   if (!data.area || !data.meter || !data.coordinates) {
     return showToast("Lengkapkan kawasan, nombor meter dan koordinat.", "error");
@@ -239,10 +276,11 @@ async function submitRecord(event) {
     areaSelect.value = retainedArea;
     localStorage.setItem("tapping-active-area", retainedArea);
     clearConfirmedMeter();
+    clearImage();
     await loadStats();
     if (state.widgetId !== null && window.turnstile) window.turnstile.reset(state.widgetId);
     state.turnstileToken = "";
-    showToast("Rekod berjaya disimpan.");
+    showToast(data.image ? "Rekod dan gambar berjaya disimpan." : "Rekod berjaya disimpan.");
     window.scrollTo({ top: 0, behavior: "smooth" });
   } catch (error) {
     showToast(error.message, "error");
@@ -270,6 +308,8 @@ function init() {
     const selectedFile = meterImage.files[0];
     if (!selectedFile) return;
     clearImage();
+    state.confirmedImage = null;
+    $("#photoSaveStatus").hidden = true;
     state.imageFile = selectedFile;
     state.imageUrl = URL.createObjectURL(state.imageFile);
     $("#meterPreview").src = state.imageUrl;
@@ -285,9 +325,9 @@ function init() {
   $("#confirmOcr").addEventListener("click", () => {
     const value = $("#ocrResult").value;
     if (!value.trim()) return showToast("Nombor meter masih kosong.", "error");
-    setConfirmedMeter(value);
+    setConfirmedMeter(value, { fromPhoto: true });
     closeModal(false);
-    showToast("Nombor meter disahkan. Gambar telah dipadam.");
+    showToast("Nombor meter disahkan. Gambar sedia disimpan ke Google Drive.");
   });
   $("#retakePhoto").addEventListener("click", () => { closeModal(); meterImage.click(); });
   $("#closeModal").addEventListener("click", () => closeModal());

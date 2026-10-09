@@ -1,6 +1,6 @@
 # Borang Tapping Meter
 
-Aplikasi web mesra telefon untuk mengumpul `NAMA KAWASAN`, `NO METER` dan `KORDINAT`. Imej nombor meter diproses oleh OCR dalam pelayar, kemudian dilepaskan daripada memori selepas pengguna mengesahkan nombor. Hanya lima kolum berikut ditulis ke Google Sheet:
+Aplikasi web mesra telefon untuk mengumpul `NAMA KAWASAN`, `NO METER` dan `KORDINAT`. Imej nombor meter diproses oleh Cloudflare AI, dimampatkan kepada maksimum 1 MB dan disimpan ke Google Drive mengikut kawasan apabila rekod dihantar. Hanya lima kolum berikut ditulis ke Google Sheet:
 
 1. `NAMA KAWASAN`
 2. `NO METER`
@@ -8,10 +8,13 @@ Aplikasi web mesra telefon untuk mengumpul `NAMA KAWASAN`, `NO METER` dan `KORDI
 4. `KORDINAT`
 5. `ALAMAT PENGGUNA` (kosong, dilengkapkan kemudian)
 
+Kolum `F` dibiarkan kosong dan kolum `G` menyimpan `LINK GAMBAR` untuk rekod kamera.
+
 ## Struktur
 
 - `dist/` — frontend statik untuk GitHub Pages.
 - `cloudflare-worker/` — API Cloudflare Worker untuk Turnstile dan Google Sheets.
+- `google-apps-script/` — jambatan simpanan gambar ke Google Drive pemilik.
 - `.openai/hosting.json` — konfigurasi pratonton Sites.
 
 ## Uji frontend
@@ -32,7 +35,7 @@ Buka `http://localhost:4173`.
 
    `NAMA KAWASAN | NO METER | NO AKAUN | KORDINAT | ALAMAT PENGGUNA`
 
-   Konfigurasi semasa membaca jadual data dari `A8:E`, selaras dengan helaian contoh. Jika header dipindahkan, ubah `GOOGLE_DATA_RANGE` dalam `cloudflare-worker/wrangler.toml`.
+   Konfigurasi semasa membaca jadual data dari `A8:G`, selaras dengan helaian contoh dan kolum pautan gambar. Jika header dipindahkan, ubah `GOOGLE_DATA_RANGE` dalam `cloudflare-worker/wrangler.toml`.
 
 ## Deploy Cloudflare Worker
 
@@ -47,6 +50,8 @@ Di dalam `cloudflare-worker/`:
    npx wrangler secret put TURNSTILE_SECRET_KEY
    npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_EMAIL
    npx wrangler secret put GOOGLE_PRIVATE_KEY
+   npx wrangler secret put GOOGLE_DRIVE_UPLOAD_URL
+   npx wrangler secret put GOOGLE_DRIVE_UPLOAD_SECRET
    ```
 
 5. Deploy: `npm run deploy`.
@@ -66,4 +71,6 @@ Daftarkan domain GitHub Pages dalam konfigurasi hostname Turnstile. Kemudian pub
 - Turnstile disahkan semula pada backend, bukan dipercayai daripada frontend.
 - Kunci rahsia Turnstile dan private key Google hanya disimpan sebagai Cloudflare secrets.
 - Backend memeriksa kawasan, format meter, koordinat dan nombor meter pendua.
-- Imej OCR tidak dimuat naik oleh aplikasi ini dan tidak ditulis ke Google Sheet.
+- Imej kamera dimampatkan kepada maksimum 1 MB sebelum dihantar.
+- Cloudflare menghantar imej terus ke Apps Script menggunakan rahsia pelayan; rahsia itu tidak didedahkan kepada pelayar.
+- Apps Script menyimpan imej dalam `BORANG TAPPING METER / [Nama Kawasan]`; gambar tidak ditulis ke Google Sheet.
