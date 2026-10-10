@@ -185,13 +185,41 @@ async function appendSheet(values, env) {
 
 async function ensureSheetHeaders(env) {
   const token = await googleAccessToken(env);
+  const metadataResponse = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}?fields=sheets.properties`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!metadataResponse.ok) throw new Error(`Google Sheets metadata failed: ${metadataResponse.status}`);
+  const metadata = await metadataResponse.json();
+  const sheet = metadata.sheets?.find((item) => item.properties?.title === env.GOOGLE_SHEET_NAME);
+  if (!sheet) throw new Error("Google Sheet tab not found");
+
+  const columnCount = Number(sheet.properties.gridProperties?.columnCount || 0);
+  if (columnCount < 7) {
+    const requests = [
+      { appendDimension: { sheetId: sheet.properties.sheetId, dimension: "COLUMNS", length: 7 - columnCount } },
+      {
+        copyPaste: {
+          source: { sheetId: sheet.properties.sheetId, startRowIndex: 7, endRowIndex: 8, startColumnIndex: 4, endColumnIndex: 5 },
+          destination: { sheetId: sheet.properties.sheetId, startRowIndex: 7, endRowIndex: 8, startColumnIndex: 6, endColumnIndex: 7 },
+          pasteType: "PASTE_FORMAT"
+        }
+      }
+    ];
+    const resizeResponse = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}:batchUpdate`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ requests })
+    });
+    if (!resizeResponse.ok) throw new Error(`Google Sheets resize failed: ${resizeResponse.status} ${await resizeResponse.text()}`);
+  }
+
   const range = encodeURIComponent(`${env.GOOGLE_SHEET_NAME}!G8`);
   const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${range}?valueInputOption=RAW`, {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ values: [["LINK GAMBAR"]] })
   });
-  if (!response.ok) throw new Error(`Google Sheets header update failed: ${response.status}`);
+  if (!response.ok) throw new Error(`Google Sheets header update failed: ${response.status} ${await response.text()}`);
 }
 
 async function googleAccessToken(env) {

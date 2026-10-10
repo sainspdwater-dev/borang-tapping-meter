@@ -240,6 +240,10 @@ function initTurnstile() {
 
 async function submitRecord(event) {
   event.preventDefault();
+  if (!$("#meterValue").value && $("#manualMode").classList.contains("active") && $("#manualMeter").value.trim()) {
+    setConfirmedMeter($("#manualMeter").value);
+    if (!$("#meterValue").value) return;
+  }
   const data = {
     area: areaSelect.value,
     meter: $("#meterValue").value,
@@ -247,9 +251,9 @@ async function submitRecord(event) {
     turnstileToken: state.turnstileToken,
     image: state.confirmedImage || ""
   };
-  if (!data.area || !data.meter || !data.coordinates) {
-    return showToast("Lengkapkan kawasan, nombor meter dan koordinat.", "error");
-  }
+  if (!data.area) return showToast("Pilih nama kawasan.", "error");
+  if (!data.meter) return showToast("Sahkan nombor meter dahulu.", "error");
+  if (!data.coordinates) return showToast("Masukkan koordinat atau gunakan lokasi semasa.", "error");
   if (config.turnstileSiteKey && !data.turnstileToken) {
     return showToast("Sila lengkapkan pengesahan Turnstile.", "error");
   }

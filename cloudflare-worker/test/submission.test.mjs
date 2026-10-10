@@ -27,6 +27,10 @@ test("camera submission stores the Drive link in column G", async () => {
       assert.equal(body.area, "Taman PD Utama");
       return Response.json({ ok: true, fileUrl: "https://drive.google.com/file/d/test/view" });
     }
+    if (url.includes("?fields=sheets.properties")) {
+      return Response.json({ sheets: [{ properties: { sheetId: 0, title: "Sheet1", gridProperties: { columnCount: 5 } } }] });
+    }
+    if (url.includes(":batchUpdate")) return Response.json({ replies: [{}, {}] });
     if (url.includes("sheets.googleapis.com") && init.method === "PUT") return Response.json({ updatedCells: 1 });
     if (url.includes(":append")) return Response.json({ updates: { updatedRows: 1 } });
     if (url.includes("sheets.googleapis.com")) {
@@ -60,6 +64,8 @@ test("camera submission stores the Drive link in column G", async () => {
     }), env);
 
     assert.equal(response.status, 201);
+    const resize = requests.find(({ url }) => url.includes(":batchUpdate"));
+    assert.equal(JSON.parse(resize.init.body).requests[0].appendDimension.length, 2);
     const headerUpdate = requests.find(({ url, init }) => url.includes("!G8") && init.method === "PUT");
     assert.deepEqual(JSON.parse(headerUpdate.init.body).values, [["LINK GAMBAR"]]);
     const append = requests.find(({ url }) => url.includes(":append"));
