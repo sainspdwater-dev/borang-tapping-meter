@@ -33,6 +33,12 @@ test("camera submission stores the Drive link in column G", async () => {
     if (url.includes(":batchUpdate")) return Response.json({ replies: [{}, {}] });
     if (url.includes("sheets.googleapis.com") && init.method === "PUT") return Response.json({ updatedCells: 1 });
     if (url.includes(":append")) return Response.json({ updates: { updatedRows: 1 } });
+    if (url.includes("values:batchGet")) {
+      return Response.json({ valueRanges: [
+        { values: [["Taman PD Utama", 87], ["Taman Flora", 163]] },
+        { values: [["NAMA KAWASAN", "NO METER", "NO AKAUN", "KORDINAT", "ALAMAT PENGGUNA", "", "LINK GAMBAR"]] }
+      ] });
+    }
     if (url.includes("sheets.googleapis.com")) {
       return Response.json({ values: [["NAMA KAWASAN", "NO METER", "NO AKAUN", "KORDINAT", "ALAMAT PENGGUNA", "", "LINK GAMBAR"]] });
     }
@@ -51,6 +57,13 @@ test("camera submission stores the Drive link in column G", async () => {
       GOOGLE_DRIVE_UPLOAD_URL: "https://script.example/upload",
       GOOGLE_DRIVE_UPLOAD_SECRET: "drive-secret"
     };
+    const statsResponse = await worker.fetch(new Request("https://worker.example/api/stats", {
+      headers: { Origin: "https://example.com" }
+    }), env);
+    const stats = await statsResponse.json();
+    assert.equal(statsResponse.status, 200);
+    assert.deepEqual(stats.targets, { "Taman PD Utama": 87, "Taman Flora": 163 });
+
     const response = await worker.fetch(new Request("https://worker.example/api/submissions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: "https://example.com" },

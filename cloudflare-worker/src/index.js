@@ -1,4 +1,4 @@
-const AREA_TARGETS = {
+const FALLBACK_AREA_TARGETS = {
   "Taman PD Utama": 214,
   "Taman Desa Permai": 86,
   "Taman Samudera": 51,
@@ -18,10 +18,10 @@ export default {
         return json({ ok: true }, 200, cors);
       }
       if (request.method === "GET" && url.pathname === "/api/stats") {
-        const rows = await readSheet(env);
-        const counts = Object.fromEntries(Object.keys(AREA_TARGETS).map((area) => [area, 0]));
+        const { targets, rows } = await readSheetData(env);
+        const counts = Object.fromEntries(Object.keys(targets).map((area) => [area, 0]));
         for (const row of rows.slice(1)) if (row[0] in counts) counts[row[0]] += 1;
-        return json({ counts, targets: AREA_TARGETS }, 200, cors);
+        return json({ counts, targets }, 200, cors);
       }
       if (request.method === "POST" && url.pathname === "/api/ocr") {
         const contentLength = Number(request.headers.get("Content-Length") || 0);
@@ -62,7 +62,8 @@ export default {
         const turnstile = await verifyTurnstile(body.turnstileToken, request, env);
         if (!turnstile.success) return json({ error: "Pengesahan Turnstile tidak berjaya." }, 403, cors);
 
-        const rows = await readSheet(env);
+        const { targets, rows } = await readSheetData(env);
+        if (!targets[body.area]) return json({ error: "Nama kawasan tidak sah." }, 400, cors);
         const duplicate = rows.slice(1).some((row) => String(row[1] || "").toUpperCase() === body.meter.toUpperCase());
         if (duplicate) return json({ error: "Nombor meter ini sudah wujud dalam rekod." }, 409, cors);
 
@@ -111,7 +112,7 @@ function extractMeterSerial(text) {
 }
 
 function validateSubmission(body) {
-  if (!body || !AREA_TARGETS[body.area]) return "Nama kawasan tidak sah.";
+  if (!body || !String(body.area || "").trim()) return "Nama kawasan tidak sah.";
   if (!/^(?:SAINS|JBANS)[A-Z0-9-]{4,25}$/i.test(String(body.meter || ""))) return "Nombor meter mesti bermula dengan SAINS atau JBANS.";
   const coordinatePattern = /^-?\d{1,2}(?:\.\d+)?,\s*-?\d{1,3}(?:\.\d+)?$/;
   if (!coordinatePattern.test(String(body.coordinates || ""))) return "Format koordinat tidak sah.";
@@ -161,15 +162,25 @@ async function verifyTurnstile(token, request, env) {
   return response.json();
 }
 
-async function readSheet(env) {
+async function readSheetData(env) {
   const token = await googleAccessToken(env);
-  const range = encodeURIComponent(`${env.GOOGLE_SHEET_NAME}!${env.GOOGLE_DATA_RANGE || "A8:E"}`);
-  const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${range}`, {
+  const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values:batchGet`);
+  url.searchParams.append("ranges", `${env.GOOGLE_SHEET_NAME}!A1:B6`);
+  url.searchParams.append("ranges", `${env.GOOGLE_SHEET_NAME}!${env.GOOGLE_DATA_RANGE || "A8:G"}`);
+  url.searchParams.set("majorDimension", "ROWS");
+  const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error(`Google Sheets read failed: ${response.status}`);
   const data = await response.json();
-  return data.values || [];
+  const targetRows = data.valueRanges?.[0]?.values || [];
+  const targets = Object.fromEntries(targetRows
+    .map((row) => [String(row[0] || "").trim(), Number(row[1])])
+    .filter(([name, target]) => name && Number.isFinite(target) && target > 0));
+  return {
+    targets: Object.keys(targets).length ? targets : FALLBACK_AREA_TARGETS,
+    rows: data.valueRanges?.[1]?.values || []
+  };
 }
 
 async function appendSheet(values, env) {
@@ -271,5 +282,5 @@ function corsHeaders(request, env) {
 }
 
 function json(data, status, headers) {
-  return new Response(JSON.stringify(data), { status, headers: { ...headers, "Content-Type": "application/json; charset=utf-8" } });
+  return new Response(JSON.stringify(data), { status, headers: { ...headers, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
 }

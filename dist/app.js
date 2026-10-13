@@ -64,15 +64,30 @@ function renderStats() {
   $("#overallRemaining").textContent = `${Math.max(0, target - done)} rekod lagi untuk disiapkan`;
 }
 
+function renderAreaOptions(preferredArea = areaSelect.value) {
+  areaSelect.innerHTML = AREAS.map((area) => `<option value="${escapeHtml(area.name)}">${escapeHtml(area.name)}</option>`).join("");
+  const storedArea = localStorage.getItem("tapping-active-area");
+  const selectedArea = [preferredArea, storedArea].find((name) => AREAS.some((area) => area.name === name));
+  if (selectedArea) areaSelect.value = selectedArea;
+}
+
 async function loadStats() {
   const refresh = $("#refreshStats");
   refresh.classList.add("loading");
   try {
     if (config.apiBaseUrl && !config.demoMode) {
-      const response = await fetch(`${config.apiBaseUrl}/api/stats`);
+      const response = await fetch(`${config.apiBaseUrl}/api/stats`, { cache: "no-store" });
       if (!response.ok) throw new Error("Tidak dapat mendapatkan statistik.");
       const data = await response.json();
-      state.stats = { ...state.stats, ...data.counts };
+      const remoteAreas = Object.entries(data.targets || {})
+        .map(([name, target]) => ({ name, target: Number(target) }))
+        .filter((area) => area.name && Number.isFinite(area.target) && area.target > 0);
+      if (remoteAreas.length) {
+        const activeArea = areaSelect.value;
+        AREAS.splice(0, AREAS.length, ...remoteAreas);
+        renderAreaOptions(activeArea);
+      }
+      state.stats = Object.fromEntries(AREAS.map((area) => [area.name, Number(data.counts?.[area.name] || 0)]));
     } else {
       state.stats = Object.fromEntries(AREAS.map((area) => [
         area.name,
@@ -295,9 +310,7 @@ async function submitRecord(event) {
 }
 
 function init() {
-  areaSelect.innerHTML = AREAS.map((area) => `<option value="${escapeHtml(area.name)}">${escapeHtml(area.name)}</option>`).join("");
-  const storedArea = localStorage.getItem("tapping-active-area");
-  if (AREAS.some((area) => area.name === storedArea)) areaSelect.value = storedArea;
+  renderAreaOptions();
   renderStats();
   loadStats();
   initTurnstile();
